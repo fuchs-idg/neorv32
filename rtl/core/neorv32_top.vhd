@@ -1564,7 +1564,7 @@ begin
 
     -- On-Chip Debugger - Debug Transport Module (DTM) ----------------------------------------
     -- -------------------------------------------------------------------------------------------
-    neorv32_debug_dtm_inst: entity neorv32.neorv32_debug_dtm
+    neorv32_debug_dtm_inst: entity neorv32.neorv32_debug_dtm_bscane2 -- use the Xilinx 7-Series JTAG Test Access Port
     generic map (
       IDCODE_VERSION => (others => '0'),
       IDCODE_PARTID  => (others => '0'),
