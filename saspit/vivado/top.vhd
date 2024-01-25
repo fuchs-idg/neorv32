@@ -46,10 +46,15 @@ entity top is
          led_o : out std_logic_vector(7 downto 0);
          twi_sda : inout std_logic;
          twi_scl : inout std_logic;
-         spi_sck  : out std_logic;
-         spi_mosi : out std_logic;
-         spi_miso : in  std_logic;
-         spi_ss   : out std_logic;
+         
+         spi_ss   : out std_logic_vector (1 downto 0);
+         -- spi0_sck  : out std_logic;  -- spi_sck is connected to the USRCCLKO port of the STARTUPE2 primitive
+         spi0_mosi : out std_logic;
+         spi0_miso : in  std_logic;
+         spi1_sck  : out std_logic;
+         spi1_mosi : out std_logic;
+         spi1_miso : in  std_logic;
+         
          uart_tx : out std_logic;
          uart_rx : in std_logic );
 end top;
@@ -62,15 +67,19 @@ architecture Behavioral of top is
     signal spi_clk_o, spi_dat_o, spi_dat_i : std_ulogic;
     signal spi_csn_o : std_ulogic_vector(07 downto 0);
     
+    signal spi0_sck : std_logic;
 begin
     
     -- Signal Assignments for Processor interfaces
     -- -------------------------------------------
     -- SPI
-    --spi_mosi <= std_logic(spi_dat_o);
-    spi_sck <= std_logic(spi_clk_o);
-    spi_ss <= std_logic(spi_csn_o(0));
-    spi_dat_i <= std_ulogic(spi_miso);
+    spi_ss <= std_logic(spi_csn_o(1)) & std_logic(spi_csn_o(0));
+    spi0_sck <= std_logic(spi_clk_o);
+    spi1_sck <= std_logic(spi_clk_o);
+    spi0_mosi <= std_logic(spi_dat_o);
+    spi1_mosi <= std_logic(spi_dat_o);
+    spi_dat_i <= std_ulogic(spi0_miso) when spi_csn_o(0) = '0' else 
+                 std_ulogic(spi1_miso) when spi_csn_o(1) = '0' else '0';
     
     -- TWI/I2C
     twi_sda       <= '0' when (twi_sda_o = '0') else 'Z'; -- drive
@@ -152,6 +161,28 @@ begin
       twi_scl_i => twi_scl_i,
       twi_scl_o => twi_scl_o
     );
-
-
+    
+       STARTUPE2_inst : STARTUPE2
+       generic map (
+          PROG_USR => "FALSE",  -- Activate program event security feature. Requires encrypted bitstreams.
+          SIM_CCLK_FREQ => 0.0  -- Set the Configuration Clock Frequency(ns) for simulation.
+       )
+       port map (
+          CFGCLK => open,       -- 1-bit output: Configuration main clock output
+          CFGMCLK => open,     -- 1-bit output: Configuration internal oscillator clock output
+          EOS => open,             -- 1-bit output: Active high output signal indicating the End Of Startup.
+          PREQ => open,           -- 1-bit output: PROGRAM request to fabric output
+          CLK => '0',             -- 1-bit input: User start-up clock input -- TODO: IS CONNECTING TO LOW OK?
+          GSR => '0',             -- 1-bit input: Global Set/Reset input (GSR cannot be used for the port name)
+          GTS => '0',             -- 1-bit input: Global 3-state input (GTS cannot be used for the port name)
+          KEYCLEARB => '0', -- 1-bit input: Clear AES Decrypter Key input from Battery-Backed RAM (BBRAM)
+          PACK => '0',           -- 1-bit input: PROGRAM acknowledge input
+          USRCCLKO => spi0_sck,   -- 1-bit input: User CCLK input
+                                  -- For Zynq-7000 devices, this input must be tied to GND
+          USRCCLKTS => '0', -- 1-bit input: User CCLK 3-state enable input
+                                  -- For Zynq-7000 devices, this input must be tied to VCC
+          USRDONEO => '1',   -- 1-bit input: User DONE pin output control  -- TODO: FIND OUT BEST VALUE HERE
+          USRDONETS => '1'  -- 1-bit input: User DONE 3-state enable output -- TODO: FIND OUT BEST VALUE HERE
+       );
+       
 end Behavioral;

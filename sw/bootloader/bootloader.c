@@ -121,7 +121,8 @@
 
 /** SPI flash boot base address */
 #ifndef SPI_BOOT_BASE_ADDR
-  #define SPI_BOOT_BASE_ADDR 0x00400000UL
+  //#define SPI_BOOT_BASE_ADDR 0x00400000UL // standard neorv32 base address
+  #define SPI_BOOT_BASE_ADDR 0x00950000UL // write and read only above and beyond xc7a200t bitstream file also stored on flash of the Nexys Video board
 #endif
 
 /* -------- XIP configuration -------- */
