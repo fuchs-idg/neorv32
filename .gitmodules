@@ -1,0 +1,3 @@
+[submodule "saspit/thirdparty/sdspi"]
+	path = saspit/thirdparty/sdspi
+	url = https://github.com/ZipCPU/sdspi.git
