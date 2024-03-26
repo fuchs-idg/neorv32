@@ -55,19 +55,89 @@ entity top is
          spi1_mosi : out std_logic;
          spi1_miso : in  std_logic;
          
+         sd_sck : out std_logic;
+         sd_cdn : in std_logic;
+         sd_sdi : out std_logic;
+         sd_sdo : in std_logic;
+         sd_csn : out std_logic;
+         sd_reset : out std_logic;
+         
          uart_tx : out std_logic;
          uart_rx : in std_logic );
 end top;
 
 architecture Behavioral of top is
-        
+    
+    -- active high reset signal
+    signal rst : std_logic;
+    
+    -- gpio
     signal con_gpio_o : std_ulogic_vector(63 downto 0);
     signal gpio_o : std_logic_vector (7 downto 0);
+    
+    -- i2c
     signal twi_sda_i, twi_sda_o, twi_scl_i, twi_scl_o : std_ulogic;
     signal spi_clk_o, spi_dat_o, spi_dat_i : std_ulogic;
     signal spi_csn_o : std_ulogic_vector(07 downto 0);
-    
     signal spi0_sck : std_logic;
+    
+    -- sd card detect
+    signal sd_cd : std_logic;
+    
+    -- wb4 --------------------------------------------------------------
+    -- wb4 std_logic
+    signal wbm_addr : std_logic_vector (1 downto 0);
+    signal wbs_data, wbm_data : std_logic_vector (31 downto 0);
+    signal wbm_we, wbm_stb, wbm_cyc, wbs_ack : std_logic;
+    signal wbm_sel : std_logic_vector (3 downto 0);
+    
+    -- wb4 std_ulogic
+    signal wb_adr_o, wb_dat_o, wb_dat_i : std_ulogic_vector (31 downto 0);
+    signal wb_we_o, wb_stb_o, wb_cyc_o, wb_ack_i : std_ulogic; 
+    signal wb_sel_o : std_ulogic_vector (3 downto 0);
+    
+    -- wb4 constants 
+    -- The gateway redirects any bus access with address outside of the ranges for IMEM, DMEM, XIP, BOOT, IO to the external Wishbone bus
+    -- One option for a device connected is therefore the address = DMEM_BASE + 0x4000_000 = 0xC000_0000. This leaves 1024 kByte room for DMEM.
+    constant c_sdspi_addr_base : std_logic_vector(31 downto 0) := x"C000_0000";
+    
+    component sdspi is
+    generic (
+      OPT_CARD_DETECT : std_logic := '1';
+      OPT_LITTLE_ENDIAN : std_logic := '1';
+      LGFIFOLN : integer := 7;
+      POWERUP_IDLE : integer := 1000;
+      STARTUP_CLOCKS : integer := 75;
+      CKDIV_BITS : integer := 8;
+      INITIAL_CLKDIV : std_logic_vector(7 downto 0);
+      OPT_SPI_ARBITRATION : std_logic := '0'
+      );
+    port(
+      i_clk : in std_logic;
+      i_sd_reset : in std_logic;
+      
+      i_wb_cyc : in std_logic;
+      i_wb_stb : in std_logic;
+      i_wb_we  : in std_logic;
+      i_wb_addr : in std_logic_vector(1 downto 0);
+      i_wb_data : in std_logic_vector(31 downto 0);
+      i_wb_sel : in std_logic_vector(3 downto 0);
+      o_wb_stall : out std_logic;
+      o_wb_ack : out std_logic;
+      o_wb_data : out std_logic_vector(31 downto 0);
+      
+      o_cs_n : out std_logic;
+      o_sck : out std_logic;
+      o_mosi : out std_logic;
+      i_miso : in std_logic;
+      i_card_detect : in std_logic;
+      
+      o_int : out std_logic;
+      i_bus_grant : in std_logic;
+      o_debug : out std_logic_vector(31 downto 0)
+      );
+    end component;
+
 begin
     
     -- Signal Assignments for Processor interfaces
@@ -89,6 +159,22 @@ begin
     
     -- GPIO output to LD0-LD7
     led_o <= std_logic_vector(con_gpio_o(7 downto 0));
+    
+    -- sd card detect
+    sd_cd <= not sd_cdn;
+    -- Wishbone interface to sdspi module
+    --  (for now: address translation and conversion between std_logic, std_ulogic
+    --  later: wishbone interconnect module to attach several slaves to wb bus at different addresses)
+    wbm_data <= std_logic_vector(wb_dat_o);
+    wbm_we <= std_logic(wb_we_o);
+    wbm_stb <= std_logic(wb_stb_o);
+    wbm_cyc <= std_logic(wb_cyc_o);
+    wbm_sel <= std_logic_vector(wb_sel_o); -- BYTE ENABLE ALL ONES!
+    wb_dat_i <= std_ulogic_vector(wbs_data);
+    wb_ack_i <= std_ulogic(wbs_ack);
+    wbm_addr <= std_logic_vector(wb_adr_o(3 downto 2)); -- no other device connected to wb as yet
+
+    
     
     -- The Core Of The Problem ----------------------------------------------------------------
     -- ----------------------------------------------------------------------------------------
@@ -116,6 +202,13 @@ begin
       -- Internal Data memory --
       MEM_INT_DMEM_EN            => true,              -- implement processor-internal data memory
       MEM_INT_DMEM_SIZE          => MEM_INT_DMEM_SIZE, -- size of processor-internal data memory in bytes
+      -- External memory interface (WISHBONE) --
+      MEM_EXT_EN                 => true,              -- implement external memory bus interface?
+      MEM_EXT_TIMEOUT            => 41,               -- cycles after a pending bus access auto-terminates (0 = disabled)
+      MEM_EXT_PIPE_MODE          => true,             -- protocol: false=classic/standard wishbone mode, true=pipelined wishbone mode
+      MEM_EXT_BIG_ENDIAN         => false,             -- byte order: true=big-endian, false=little-endian
+      MEM_EXT_ASYNC_RX           => false,             -- use register buffer for RX data when false
+      MEM_EXT_ASYNC_TX           => false,             -- use register buffer for TX data when false      
       -- Processor peripherals --
       IO_GPIO_NUM                => 8,                 -- number of GPIO input/output pairs (0..64)
       IO_MTIME_EN                => true,              -- implement machine system timer (MTIME)?
@@ -125,7 +218,7 @@ begin
       IO_UART1_EN                => false,             -- implement secondary universal asynchronous receiver/transmitter (UART1)?
       IO_UART1_RX_FIFO           => 1,                 -- RX fifo depth, has to be a power of two, min 1
       IO_UART1_TX_FIFO           => 1,                 -- TX fifo depth, has to be a power of two, min 1
-      IO_SPI_EN                  => true,             -- implement serial peripheral interface (SPI)?
+      IO_SPI_EN                  => true,              -- implement serial peripheral interface (SPI)?
       IO_SPI_FIFO                => 2,                 -- RTX fifo depth, has to be a power of two, min 1
       IO_SDI_EN                  => false,             -- implement serial data interface (SDI)?
       IO_SDI_FIFO                => 1,                 -- RTX fifo depth, has to be zero or a power of two, min 1
@@ -133,7 +226,8 @@ begin
       IO_PWM_NUM_CH              => 0,                 -- number of PWM channels to implement (0..12); 0 = disabled
       IO_WDT_EN                  => false,             -- implement watch dog timer (WDT)?
       IO_TRNG_EN                 => true,              -- implement true random number generator (TRNG)?
-      IO_TRNG_FIFO               => 1                  -- data fifo depth, has to be a power of two, min 1
+      IO_TRNG_FIFO               => 1,                 -- data fifo depth, has to be a power of two, min 1
+      IO_GPTMR_EN                => true              -- implement general purpose timer (GPTMR)?
     )
     port map (
       -- Global control --
@@ -145,6 +239,17 @@ begin
       jtag_tdi_i  => '1',  -- serial data input
       jtag_tdo_o  => open,  -- serial data output
       jtag_tms_i  => '1',  -- mode select
+      -- Wishbone bus interface (available if MEM_EXT_EN = true) --
+      wb_tag_o    => open,
+      wb_adr_o    => wb_adr_o, -- has to be resolved downto 2 bits
+      wb_dat_i    => wb_dat_i,
+      wb_dat_o    => wb_dat_o,
+      wb_we_o     => wb_we_o,
+      wb_sel_o    => wb_sel_o,
+      wb_stb_o    => wb_stb_o,
+      wb_cyc_o    => wb_cyc_o,
+      wb_ack_i    => wb_ack_i,
+      wb_err_i    => '0',
       -- GPIO (available if IO_GPIO_NUM > 0) --
       gpio_o      => con_gpio_o,  -- parallel output
       -- primary UART0 (available if IO_UART0_EN = true) --
@@ -161,6 +266,41 @@ begin
       twi_scl_i => twi_scl_i,
       twi_scl_o => twi_scl_o
     );
+    
+    rst <= not rstn_i;
+    sd_reset <= rst;
+    sdspi_inst : sdspi
+    generic map (
+      OPT_CARD_DETECT => '1',
+      OPT_LITTLE_ENDIAN => '1',
+      LGFIFOLN => 7,
+      POWERUP_IDLE => 1000,
+      STARTUP_CLOCKS => 75,
+      CKDIV_BITS => 8,
+      INITIAL_CLKDIV => x"7C",
+      OPT_SPI_ARBITRATION => '0')
+    port map (
+      i_clk => clk,
+      i_sd_reset => rst, -- todo: is this ok?
+      
+      i_wb_cyc => wbm_cyc,
+      i_wb_stb => wbm_stb,
+      i_wb_we  => wbm_we,
+      i_wb_addr => wbm_addr,
+      i_wb_data => wbm_data,
+      i_wb_sel => "1111",
+      o_wb_stall => open,
+      o_wb_ack => wbs_ack,
+      o_wb_data => wbs_data,
+      
+      o_cs_n => sd_csn,
+      o_sck => sd_sck,
+      o_mosi => sd_sdi,
+      i_miso => sd_sdo,
+      i_card_detect => sd_cd,
+      
+      o_int => open,
+      i_bus_grant => '1');
     
        STARTUPE2_inst : STARTUPE2
        generic map (

@@ -1,6 +1,7 @@
 [submodule "saspit/thirdparty/sdspi"]
 	path = saspit/thirdparty/sdspi
-	url = https://github.com/ZipCPU/sdspi.git
+	url = https://github.com/fuchs-idg/sdspi.git
+	branch = neorv32_port
 [submodule "saspit/thirdparty/fatfs"]
 	path = saspit/thirdparty/fatfs
 	url = https://github.com/abbrev/fatfs.git
