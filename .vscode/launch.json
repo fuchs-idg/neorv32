@@ -1,0 +1,38 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "riscv32-unknown-elf-gdb",
+            "type": "cppdbg",
+            "request": "launch",
+            "useExtendedRemote": true,
+            "MIMode": "gdb",
+            // "stopAtEntry": true,
+            "miDebuggerPath": "/opt/riscv/bin/riscv32-unknown-elf-gdb",
+            "environment": [],
+            "postRemoteConnectCommands": [
+                {
+                    "text" : "load"
+                }
+            ],
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "miDebuggerServerAddress": "localhost:3333",
+            "program": "${fileDirname}/${fileBasenameNoExtension}.elf",
+            "cwd": "${workspaceFolder}",
+            "logging": {
+                "engineLogging": false,
+                "trace": false,
+                "traceResponse": false
+             }
+        }
+    ]
+}

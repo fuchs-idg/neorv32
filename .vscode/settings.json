@@ -1,0 +1,17 @@
+{
+    "files.associations": {
+        "diskio.h": "c",
+        "sdspidrv.h": "c",
+        "diskiodrvr.h": "c",
+        "stddef.h": "c",
+        "neorv32.h": "c",
+        "neorv32_intrinsics.h": "c",
+        "legacy.h": "c",
+        "neorv32_uart.h": "c",
+        "stdlib.h": "c",
+        "neorv32_cpu.h": "c",
+        "unistd.h": "c",
+        "neorv32_twi.h": "c",
+        "neorv32_wdt.h": "c"
+    }
+}
