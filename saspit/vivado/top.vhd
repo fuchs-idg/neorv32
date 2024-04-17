@@ -193,6 +193,9 @@ begin
       CPU_EXTENSION_RISCV_U      => true,              -- implement user mode extension?    
       CPU_EXTENSION_RISCV_Zfinx  => true,              -- implement 32-bit floating-point extension (using INT regs!)
       CPU_EXTENSION_RISCV_Zicntr => true,              -- implement base counters?
+          -- Physical Memory Protection (PMP) --
+      PMP_NUM_REGIONS            => 8,
+      PMP_MIN_GRANULARITY        => 16,
       -- Tuning Options --                                                                                                
       FAST_MUL_EN                => true,              -- use DSPs for M extension's multiplier
       FAST_SHIFT_EN              => true,              -- use barrel shifter for shift operations
